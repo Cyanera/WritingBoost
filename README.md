@@ -12,20 +12,30 @@ fields that explain vocabulary and expressions.
 
 ## Deploy a live version (real AI, any text)
 
-The improvement runs on Claude via a server-side route, so a live deployment
-needs a Node host and your Anthropic API key. The fastest path is Vercel:
+The improvement runs on the server, so a live deployment needs a Node host and
+**one AI key**. You can host **for free** on Vercel; the app supports two AI
+providers:
+
+- **Google Gemini — free, no credit card.** Get a key at
+  [aistudio.google.com/apikey](https://aistudio.google.com/apikey) and set
+  `GEMINI_API_KEY`. This is the recommended free path.
+- **Anthropic Claude — paid, highest quality.** Get a key at
+  [console.anthropic.com](https://console.anthropic.com/settings/keys) and set
+  `ANTHROPIC_API_KEY` (takes priority if both are set).
+
+### Deploy on Vercel (free)
 
 1. Click **Deploy**, or go to [vercel.com/new](https://vercel.com/new) and import
    this repository.
 
-   [![Deploy with Vercel](https://vercel.com/button)](https://vercel.com/new/clone?repository-url=https://github.com/cyanera/writingboost&env=ANTHROPIC_API_KEY&envDescription=Your%20Anthropic%20API%20key&project-name=writing-boost&repository-name=writing-boost)
+   [![Deploy with Vercel](https://vercel.com/button)](https://vercel.com/new/clone?repository-url=https://github.com/cyanera/writingboost&env=GEMINI_API_KEY&envDescription=A%20free%20Google%20Gemini%20API%20key%20from%20aistudio.google.com/apikey&project-name=writing-boost&repository-name=writing-boost)
 
-2. When prompted, set the `ANTHROPIC_API_KEY` environment variable to your key
-   from [console.anthropic.com](https://console.anthropic.com/settings/keys).
+2. When prompted, set **`GEMINI_API_KEY`** to your free key (or
+   `ANTHROPIC_API_KEY` if you prefer Claude).
 3. Deploy. Vercel gives you a public URL that improves any text with live AI.
 
 It runs the same on any Node host (Render, Railway, Fly.io, a VPS) — build with
-`npm run build`, start with `npm start`, and set `ANTHROPIC_API_KEY`.
+`npm run build`, start with `npm start`, and set one of the keys above.
 
 ---
 
@@ -84,16 +94,18 @@ API key is never exposed to the browser.
 
 ## Running the app
 
-**Prerequisites:** Node.js 18.18+ (Node 22 recommended) and an
-[Anthropic API key](https://console.anthropic.com/settings/keys).
+**Prerequisites:** Node.js 18.18+ (Node 22 recommended) and **one AI key** —
+a free [Google Gemini key](https://aistudio.google.com/apikey) or an
+[Anthropic key](https://console.anthropic.com/settings/keys).
 
 ```bash
 # 1. Install dependencies
 npm install
 
-# 2. Add your API key
+# 2. Add one AI key
 cp .env.example .env.local
-#   then edit .env.local and set ANTHROPIC_API_KEY=sk-ant-...
+#   then edit .env.local and set GEMINI_API_KEY=...  (free)
+#   or ANTHROPIC_API_KEY=sk-ant-...                  (paid)
 
 # 3a. Development
 npm run dev
@@ -106,10 +118,15 @@ npm start
 
 ### Configuration
 
-| Variable            | Required | Default          | Purpose                                  |
-| ------------------- | -------- | ---------------- | ---------------------------------------- |
-| `ANTHROPIC_API_KEY` | ✅       | —                | Your Anthropic API key (server‑side).    |
-| `ANTHROPIC_MODEL`   | ❌       | `claude-opus-5`  | Override the model used for improvements. |
+Set **one** provider key. If `ANTHROPIC_API_KEY` is present it is used;
+otherwise the app uses `GEMINI_API_KEY`.
+
+| Variable            | Required        | Default            | Purpose                                        |
+| ------------------- | --------------- | ------------------ | ---------------------------------------------- |
+| `GEMINI_API_KEY`    | one key needed  | —                  | Free Google Gemini key (aistudio.google.com).  |
+| `GEMINI_MODEL`      | ❌              | `gemini-2.5-flash` | Override the Gemini model.                      |
+| `ANTHROPIC_API_KEY` | one key needed  | —                  | Anthropic key; takes priority if set.          |
+| `ANTHROPIC_MODEL`   | ❌              | `claude-opus-5`    | Override the Anthropic model.                   |
 
 `.env.local` is git‑ignored, so credentials are never committed.
 

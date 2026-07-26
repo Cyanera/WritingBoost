@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import Anthropic from "@anthropic-ai/sdk";
+import { GoogleGenAI } from "@google/genai";
 import { BANDS, type ApiError, type ApiResponse, type ImprovementResult } from "@/lib/types";
 import { validateText } from "@/lib/text";
 
@@ -7,7 +8,18 @@ export const runtime = "nodejs";
 // Improvements can take a little while with a reasoning model — allow headroom.
 export const maxDuration = 300;
 
-const MODEL = process.env.ANTHROPIC_MODEL || "claude-opus-5";
+const ANTHROPIC_MODEL = process.env.ANTHROPIC_MODEL || "claude-opus-5";
+const GEMINI_MODEL = process.env.GEMINI_MODEL || "gemini-2.5-flash";
+
+// A provider error we can map to a user-facing message + code.
+class ProviderError extends Error {
+  constructor(
+    public code: ApiError["code"],
+    message: string,
+  ) {
+    super(message);
+  }
+}
 
 // JSON Schema for the structured result. Follows the structured-output rules:
 // every object sets additionalProperties:false and lists required fields.
@@ -135,6 +147,90 @@ function badRequest(code: ApiError["code"], error: string) {
   return NextResponse.json<ApiResponse>({ ok: false, code, error }, { status: 400 });
 }
 
+function userMessage(band: string, text: string): string {
+  return `Improve the following passage to IELTS band ${band}. Return only the JSON object.\n\n<passage>\n${text.trim()}\n</passage>`;
+}
+
+/** Parse the model's JSON output, tolerating an accidental ```json code fence. */
+function parseResult(raw: string): ImprovementResult {
+  let t = raw.trim();
+  if (t.startsWith("```")) {
+    t = t.replace(/^```(?:json)?\s*/i, "").replace(/```\s*$/, "").trim();
+  }
+  let parsed: ImprovementResult;
+  try {
+    parsed = JSON.parse(t) as ImprovementResult;
+  } catch {
+    throw new ProviderError(
+      "bad_response",
+      "The improvement result could not be read. Please try again.",
+    );
+  }
+  if (
+    !parsed ||
+    !Array.isArray(parsed.segments) ||
+    parsed.segments.length === 0 ||
+    !Array.isArray(parsed.vocabularyChanges) ||
+    !Array.isArray(parsed.usefulExpressions) ||
+    !Array.isArray(parsed.techniques) ||
+    !Array.isArray(parsed.tips)
+  ) {
+    throw new ProviderError(
+      "bad_response",
+      "The improvement result was incomplete. Please try again.",
+    );
+  }
+  return parsed;
+}
+
+async function improveWithAnthropic(apiKey: string, band: string, text: string): Promise<string> {
+  const client = new Anthropic({ apiKey });
+  const stream = client.messages.stream({
+    model: ANTHROPIC_MODEL,
+    max_tokens: 16000,
+    system: systemPrompt(band),
+    output_config: {
+      effort: "medium",
+      format: {
+        type: "json_schema",
+        schema: RESULT_SCHEMA as unknown as Record<string, unknown>,
+      },
+    },
+    messages: [{ role: "user", content: userMessage(band, text) }],
+  });
+
+  const message = await stream.finalMessage();
+  if (message.stop_reason === "refusal") {
+    throw new ProviderError(
+      "upstream",
+      "The request could not be processed. Please adjust your text and try again.",
+    );
+  }
+  const textBlock = message.content.find((b): b is Anthropic.TextBlock => b.type === "text");
+  if (!textBlock) {
+    throw new ProviderError("bad_response", "The model returned no text.");
+  }
+  return textBlock.text;
+}
+
+async function improveWithGemini(apiKey: string, band: string, text: string): Promise<string> {
+  const ai = new GoogleGenAI({ apiKey });
+  const res = await ai.models.generateContent({
+    model: GEMINI_MODEL,
+    contents: userMessage(band, text),
+    config: {
+      systemInstruction: systemPrompt(band),
+      responseMimeType: "application/json",
+      temperature: 0.4,
+    },
+  });
+  const out = res.text;
+  if (!out) {
+    throw new ProviderError("bad_response", "The model returned no text.");
+  }
+  return out;
+}
+
 export async function POST(req: Request) {
   let body: { text?: unknown; band?: unknown };
   try {
@@ -155,113 +251,58 @@ export async function POST(req: Request) {
     return badRequest(issue.code, issue.message);
   }
 
-  const apiKey = process.env.ANTHROPIC_API_KEY;
-  if (!apiKey) {
+  // Provider selection: Anthropic if its key is set, otherwise free Google Gemini.
+  const anthropicKey = process.env.ANTHROPIC_API_KEY;
+  const geminiKey = process.env.GEMINI_API_KEY || process.env.GOOGLE_API_KEY;
+
+  if (!anthropicKey && !geminiKey) {
     return NextResponse.json<ApiResponse>(
       {
         ok: false,
         code: "no_api_key",
         error:
-          "The server is missing its Anthropic API key. Add ANTHROPIC_API_KEY to .env.local and restart.",
+          "The server has no AI key configured. Set GEMINI_API_KEY (free from aistudio.google.com) or ANTHROPIC_API_KEY, then redeploy.",
       },
       { status: 500 },
     );
   }
 
-  const client = new Anthropic({ apiKey });
-
   try {
-    const stream = client.messages.stream({
-      model: MODEL,
-      max_tokens: 16000,
-      system: systemPrompt(band),
-      output_config: {
-        effort: "medium",
-        format: {
-          type: "json_schema",
-          schema: RESULT_SCHEMA as unknown as Record<string, unknown>,
-        },
-      },
-      messages: [
-        {
-          role: "user",
-          content: `Improve the following passage to IELTS band ${band}. Return only the JSON object.\n\n<passage>\n${text.trim()}\n</passage>`,
-        },
-      ],
-    });
-
-    const message = await stream.finalMessage();
-
-    if (message.stop_reason === "refusal") {
-      return NextResponse.json<ApiResponse>(
-        {
-          ok: false,
-          code: "upstream",
-          error:
-            "The request could not be processed. Please adjust your text and try again.",
-        },
-        { status: 502 },
-      );
-    }
-
-    const textBlock = message.content.find(
-      (b): b is Anthropic.TextBlock => b.type === "text",
-    );
-    if (!textBlock) {
-      return NextResponse.json<ApiResponse>(
-        { ok: false, code: "bad_response", error: "The model returned no text." },
-        { status: 502 },
-      );
-    }
-
-    let parsed: ImprovementResult;
-    try {
-      parsed = JSON.parse(textBlock.text) as ImprovementResult;
-    } catch {
-      return NextResponse.json<ApiResponse>(
-        {
-          ok: false,
-          code: "bad_response",
-          error: "The improvement result could not be read. Please try again.",
-        },
-        { status: 502 },
-      );
-    }
-
-    if (
-      !parsed ||
-      !Array.isArray(parsed.segments) ||
-      parsed.segments.length === 0 ||
-      !Array.isArray(parsed.vocabularyChanges) ||
-      !Array.isArray(parsed.usefulExpressions) ||
-      !Array.isArray(parsed.techniques) ||
-      !Array.isArray(parsed.tips)
-    ) {
-      return NextResponse.json<ApiResponse>(
-        {
-          ok: false,
-          code: "bad_response",
-          error: "The improvement result was incomplete. Please try again.",
-        },
-        { status: 502 },
-      );
-    }
-
-    return NextResponse.json<ApiResponse>({ ok: true, result: parsed });
+    const raw = anthropicKey
+      ? await improveWithAnthropic(anthropicKey, band, text)
+      : await improveWithGemini(geminiKey as string, band, text);
+    const result = parseResult(raw);
+    return NextResponse.json<ApiResponse>({ ok: true, result });
   } catch (err) {
-    const status =
-      err instanceof Anthropic.APIError && typeof err.status === "number"
-        ? err.status
-        : 502;
+    if (err instanceof ProviderError) {
+      const status = err.code === "bad_response" ? 502 : 502;
+      return NextResponse.json<ApiResponse>(
+        { ok: false, code: err.code, error: err.message },
+        { status },
+      );
+    }
+
+    // Provider/SDK errors (network, auth, rate limit) from either provider.
     let error = "We couldn't reach the improvement service. Please try again.";
+    let status = 502;
+    const msg = err instanceof Error ? err.message : String(err);
+
     if (err instanceof Anthropic.AuthenticationError) {
       error = "The Anthropic API key is invalid. Please check your configuration.";
     } else if (err instanceof Anthropic.RateLimitError) {
       error = "The service is busy right now. Please wait a moment and try again.";
+    } else if (/api[_ ]?key|API_KEY_INVALID|unauthenticated|permission|401|403/i.test(msg)) {
+      error = "The AI API key is invalid or unauthorized. Please check your configuration.";
+    } else if (/quota|rate|RESOURCE_EXHAUSTED|429|overloaded/i.test(msg)) {
+      error = "The free quota is busy or exhausted right now. Please wait a moment and try again.";
     }
+    if (err instanceof Anthropic.APIError && typeof err.status === "number") {
+      status = err.status >= 400 && err.status < 600 ? err.status : 502;
+    }
+
     return NextResponse.json<ApiResponse>(
       { ok: false, code: "upstream", error },
-      { status: status >= 400 && status < 600 ? status : 502 },
+      { status },
     );
   }
 }
