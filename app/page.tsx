@@ -10,6 +10,7 @@ import {
   type ValidationCode,
 } from "@/lib/text";
 import { TOPICS, nextTopicIndex } from "@/lib/topics";
+import { Brand } from "./Brand";
 
 const DRAFT_KEY = "wb:draft";
 const RESULT_KEY = "wb:result";
@@ -110,12 +111,7 @@ export default function EnterTextPage() {
 
   return (
     <main className="page">
-      <div className="brand">
-        <div className="brand-mark" aria-hidden="true">
-          W
-        </div>
-        <div className="brand-name">Writing Boost!</div>
-      </div>
+      <Brand />
 
       <header className="hero">
         <h1>Write with greater clarity, accuracy, and confidence.</h1>

@@ -1,14 +1,61 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState, type ReactNode } from "react";
 import { useRouter } from "next/navigation";
 import type { StoredResult } from "@/lib/types";
 import { countWords } from "@/lib/text";
+import { Brand } from "../Brand";
 
 const DRAFT_KEY = "wb:draft";
 const RESULT_KEY = "wb:result";
 
 type View = "improved" | "beforeAfter";
+
+/** A collapsible result section with an open/close chevron. */
+function Section({
+  num,
+  title,
+  desc,
+  defaultOpen = false,
+  children,
+}: {
+  num: number;
+  title: string;
+  desc?: string;
+  defaultOpen?: boolean;
+  children: ReactNode;
+}) {
+  return (
+    <details className="card section" open={defaultOpen}>
+      <summary className="section-summary">
+        <span className="section-head">
+          <span className="section-num">{num}</span>
+          <h2>{title}</h2>
+        </span>
+        <svg
+          className="chev"
+          viewBox="0 0 24 24"
+          width="20"
+          height="20"
+          fill="none"
+          aria-hidden="true"
+        >
+          <path
+            d="M6 9l6 6 6-6"
+            stroke="currentColor"
+            strokeWidth="2.2"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+          />
+        </svg>
+      </summary>
+      <div className="section-body">
+        {desc && <p className="section-desc">{desc}</p>}
+        {children}
+      </div>
+    </details>
+  );
+}
 
 function useCopy(): [boolean, (text: string) => void] {
   const [copied, setCopied] = useState(false);
@@ -79,12 +126,7 @@ export default function ResultPage() {
   if (!stored) {
     return (
       <main className="page">
-        <div className="brand">
-          <div className="brand-mark" aria-hidden="true">
-            W
-          </div>
-          <div className="brand-name">Writing Boost!</div>
-        </div>
+        <Brand />
         <section className="card section empty-state">
           <h2>No writing to show yet</h2>
           <p>Head back and enter some text to see your improved version here.</p>
@@ -123,12 +165,7 @@ export default function ResultPage() {
 
   return (
     <main className="page wide">
-      <div className="brand">
-        <div className="brand-mark" aria-hidden="true">
-          W
-        </div>
-        <div className="brand-name">Writing Boost!</div>
-      </div>
+      <Brand />
 
       <header className="result-top">
         <div>
@@ -148,12 +185,7 @@ export default function ResultPage() {
       </header>
 
       {/* 1. Improved Text ------------------------------------------------- */}
-      <section className="card section">
-        <div className="section-head">
-          <span className="section-num">1</span>
-          <h2>Improved Text</h2>
-        </div>
-
+      <Section num={1} title="Improved Text" defaultOpen>
         <div className="view-bar">
           <div className="toggle" role="tablist" aria-label="View mode">
             <button
@@ -216,18 +248,15 @@ export default function ResultPage() {
             </div>
           </div>
         )}
-      </section>
+      </Section>
 
       {/* 2. Vocabulary Changes -------------------------------------------- */}
       {result.vocabularyChanges.length > 0 && (
-        <section className="card section">
-          <div className="section-head">
-            <span className="section-num">2</span>
-            <h2>Vocabulary Changes</h2>
-          </div>
-          <p className="section-desc">
-            Every meaningful word or phrase that was replaced in your text.
-          </p>
+        <Section
+          num={2}
+          title="Vocabulary Changes"
+          desc="Every meaningful word or phrase that was replaced in your text."
+        >
           <div className="list">
             {result.vocabularyChanges.map((v, i) => (
               <div className="item" key={i}>
@@ -247,20 +276,16 @@ export default function ResultPage() {
               </div>
             ))}
           </div>
-        </section>
+        </Section>
       )}
 
       {/* 3. Useful Expressions -------------------------------------------- */}
       {result.usefulExpressions.length > 0 && (
-        <section className="card section">
-          <div className="section-head">
-            <span className="section-num">3</span>
-            <h2>Useful Expressions</h2>
-          </div>
-          <p className="section-desc">
-            Notable expressions used in your improved text, with meaning and Arabic
-            translation.
-          </p>
+        <Section
+          num={3}
+          title="Useful Expressions"
+          desc="Notable expressions used in your improved text, with meaning and Arabic translation."
+        >
           <div className="list">
             {result.usefulExpressions.map((e, i) => (
               <div className="item" key={i}>
@@ -274,19 +299,16 @@ export default function ResultPage() {
               </div>
             ))}
           </div>
-        </section>
+        </Section>
       )}
 
       {/* 4. How the Writing Was Improved ---------------------------------- */}
       {result.techniques.length > 0 && (
-        <section className="card section">
-          <div className="section-head">
-            <span className="section-num">4</span>
-            <h2>How the Writing Was Improved</h2>
-          </div>
-          <p className="section-desc">
-            The most important techniques applied, with real examples from your text.
-          </p>
+        <Section
+          num={4}
+          title="How the Writing Was Improved"
+          desc="The most important techniques applied, with real examples from your text."
+        >
           <div className="list">
             {result.techniques.map((t, i) => (
               <div className="tech" key={i}>
@@ -307,19 +329,16 @@ export default function ResultPage() {
               </div>
             ))}
           </div>
-        </section>
+        </Section>
       )}
 
       {/* 5. Personalised Writing Tips ------------------------------------- */}
       {result.tips.length > 0 && (
-        <section className="card section">
-          <div className="section-head">
-            <span className="section-num">5</span>
-            <h2>Personalised Writing Tips</h2>
-          </div>
-          <p className="section-desc">
-            Focused on what would most improve your writing specifically.
-          </p>
+        <Section
+          num={5}
+          title="Personalised Writing Tips"
+          desc="Focused on what would most improve your writing specifically."
+        >
           <div className="tips">
             {result.tips.map((tip, i) => (
               <div className="tip" key={i}>
@@ -328,7 +347,7 @@ export default function ResultPage() {
               </div>
             ))}
           </div>
-        </section>
+        </Section>
       )}
 
       <div className="actions">
