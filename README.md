@@ -10,6 +10,25 @@ fields that explain vocabulary and expressions.
 
 ---
 
+## Deploy a live version (real AI, any text)
+
+The improvement runs on Claude via a server-side route, so a live deployment
+needs a Node host and your Anthropic API key. The fastest path is Vercel:
+
+1. Click **Deploy**, or go to [vercel.com/new](https://vercel.com/new) and import
+   this repository.
+
+   [![Deploy with Vercel](https://vercel.com/button)](https://vercel.com/new/clone?repository-url=https://github.com/cyanera/writingboost&env=ANTHROPIC_API_KEY&envDescription=Your%20Anthropic%20API%20key&project-name=writing-boost&repository-name=writing-boost)
+
+2. When prompted, set the `ANTHROPIC_API_KEY` environment variable to your key
+   from [console.anthropic.com](https://console.anthropic.com/settings/keys).
+3. Deploy. Vercel gives you a public URL that improves any text with live AI.
+
+It runs the same on any Node host (Render, Railway, Fly.io, a VPS) — build with
+`npm run build`, start with `npm start`, and set `ANTHROPIC_API_KEY`.
+
+---
+
 ## What it does
 
 **Page 1 — Enter Your Text**
